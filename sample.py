@@ -256,6 +256,9 @@ for file_num in range(len(target_list)):
     try:
         run(target_list[file_num])          
     except :
+        # TODO 毎回1行目しか書込みできない。毎回次の行となるように修正
+        with open('ErrorFileList.txt',mode='w',encoding='utf-8') as f:
+            f.write(target_list[file_num] + '\n')
         print(target_list[file_num])
 
 # # PNGに変換（Tesseractの要件）
