@@ -30,3 +30,10 @@ https://punhundon-lifeshift.com/tesseract_ocr
 ### 形態素解析
 　Mecabの導入
  https://qiita.com/menon/items/f041b7c46543f38f78f7
+
+### フォルダ内のファイル一覧作成
+  glob.glob
+  https://note.nkmk.me/python-glob-usage/
+  
+### MeCabにユーザー辞書追加
+  https://qiita.com/madaaamj/items/71fbfbf71c9ff56e1987
