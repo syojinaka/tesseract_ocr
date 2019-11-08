@@ -26,3 +26,7 @@ https://punhundon-lifeshift.com/tesseract_ocr
 |werkzeug|0.16.0|
 |wheel|0.33.6|
 |wincertstore|0.2|
+
+### 形態素解析
+　Mecabの導入
+ https://qiita.com/menon/items/f041b7c46543f38f78f7
