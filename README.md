@@ -37,3 +37,6 @@ https://punhundon-lifeshift.com/tesseract_ocr
   
 ### MeCabにユーザー辞書追加
   https://qiita.com/madaaamj/items/71fbfbf71c9ff56e1987
+  
+### 進捗バー
+  https://narito.ninja/blog/detail/68/
