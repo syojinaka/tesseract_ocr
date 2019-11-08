@@ -10,7 +10,10 @@ import mimetypes
 import cv2
 import numpy as np
 import os
-
+import pathlib
+import datetime
+import MeCab
+from collections import Counter
 
 # 変換：：convert from PDF or PNG to numpy.ndarray
 def convert_pdfpng2ndarray(path):
@@ -70,7 +73,65 @@ def delete_space(txt):
     txt = re.sub('([あ-んア-ン一-龥ー])\s+((?=[あ-んア-ン一-龥ー]))',r'\1\2', txt)
     return txt
 
+# 拡張子を除去したファイル名を返却
+def eliminate_ext(name):
+    name = name.split('.')[0] 
+    return name
 
+# 作成日時の取得
+def get_ctime(path):
+    p = pathlib.Path(path)
+    ctime = datetime.datetime.fromtimestamp(p.stat().st_ctime)
+    create_time = ctime.strftime('%Y{0}%m{1}%d{2} %H{3}%M{4}').format(*'年月日時分')
+    return create_time
+
+# 更新日時の取得
+def get_mtime(path):
+    # pathlib.Pathオブジェクトに変換
+    p = pathlib.Path(path)
+    # 日付文字列に変換
+    ctime = datetime.datetime.fromtimestamp(p.stat().st_mtime)
+    update_time = ctime.strftime('%Y{0}%m{1}%d{2} %H{3}%M{4}').format(*'年月日時分')
+    return update_time
+
+# ファイル名の取得
+def get_fname(path):
+    # ファイル名取得
+    f_name = os.path.basename(path)
+    # 拡張子を除去して返却
+    return eliminate_ext(f_name)
+
+# フォルダ名の取得
+# ファイルが配置されているフォルダの名前を取得
+def get_fdname(path):
+    # フォルダ名の取得
+    dir_name = os.path.dirname(path)
+    return dir_name
+
+# 拡張子の取得
+def get_ext(path):
+    extention = os.path.splitext(path)
+    return extention[1][1:]
+
+# 頻出単語の抽出
+def  extract_words(txt):
+    mecab = MeCab.Tagger()
+    parse = mecab.parse(txt)
+    lines = parse.split('\n')
+    items = (re.split('[\t,]', line) for line in lines)
+
+    # 名詞をリストに格納
+    words = [item[0]
+         for item in items
+         if (item[0] not in ('EOS', '', 't', 'ー') and
+             item[1] == '名詞' and item[2] == '一般')]
+
+    # 頻度順に出力
+    counter = Counter(words)
+    list = []
+    for word, count in counter.most_common():
+        list.append([word,count])
+    return list
 
 print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝')
 tools = pyocr.get_available_tools()
@@ -105,16 +166,23 @@ area = np.array([])
 
 # 引数で指定されたパスにあるイメージデータの読み込み
 path = sys.argv[1]
-# ファイル名を取得
-list = path.split('/')
-list = list[1].split('.')
-file_name = list[0]
 # PDFであればPNGに変換
 img = convert_pdfpng2ndarray(path)
 # imageをネガポジ変換する　認識精度低下したため、ネガポジ変換はしない
 # img = convert_bitwise(img)
 
-# OCR
+# ファイル名の取得
+file_name = get_fname(path)
+# フォルダ名の取得
+folder_name = get_fdname(path)
+# 拡張子の取得
+extention = get_ext(path)
+# 作成日時の取得
+create_date = get_ctime(path)
+# 更新日時の取得
+update_date = get_mtime(path)
+
+# OCRの実行
 if TARGET == False:
     #### 領域指定なし######
     txt = convert_png2txt(img, file_name)
@@ -125,10 +193,28 @@ else:
 # 不要なスペースを削除
 txt = delete_space(txt)
 
+# 頻出単語を抽出
+list = extract_words(txt)
+
 # 読み取ったテキストをTEXTファイルに書き出す
 with open(file_name + '.txt',mode='w',encoding='utf-8') as f:
+    f.write('******Property情報****************************\n')
+    f.write('  ファイル名 : ' + file_name + '\n')
+    f.write('  フォルダ名 : ' + folder_name + '\n')
+    f.write('  拡張子     : ' + extention + '\n')
+    f.write('  作成日時   : ' + create_date + '\n')
+    f.write('  更新日時   : ' + update_date + '\n')
+    f.write('\n\n')
+
+    f.write('******単語抽出*******************************\n')
+    for word_count in list:
+        f.write(word_count[0] + '::' + str(word_count[1]) + '\n')
+
+    f.write('\n\n')
+    f.write('******OCR結果*********************************\n')
     f.write(txt)
+    print('Completed!')
 
 # 読み取ったテキストをコマンドラインに表示
-print(txt)
+# print(txt)
 
