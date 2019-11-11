@@ -15,6 +15,8 @@ import datetime
 import MeCab
 from collections import Counter
 import glob
+import csv
+import fileProperty
 
 # 変換：：convert from PDF or PNG to numpy.ndarray
 def convert_pdfpng2ndarray(path):
@@ -35,7 +37,7 @@ def convert_pdfpng2ndarray(path):
 # 光学認識：：PNG　⇒　TXT
 def convert_png2txt(target_img, file_name):
     # 読み取り対象をPNGとして保存
-    cv2.imwrite('result/' + file_name + '.png',target_img)
+    imwrite('result/' + file_name + '.png',target_img)
     print('Now recognizing.....')
 
     txt = tool.image_to_string(
@@ -50,9 +52,8 @@ def convert_png2txt(target_img, file_name):
 def convert_png2txt_fromarray(target_img, area, file_name):
     # 読み取り領域確認用
     # 　PNGファイルとして保存
-    cv2.imwrite('result/' + file_name + '.png',target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]])
+    imwrite('result/' + file_name + '.png',target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]])
     print('Now recognizing.....')
-
     txt = tool.image_to_string(
         Image.fromarray(target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]]),
         lang = lang,
@@ -138,16 +139,9 @@ def  extract_words(txt):
     return list
 
 # OCRの結果をテキストに書き出し
-def write_to_text(text, file_name, folder_name, extention, create_date, update_date, list):
+def write_to_text(file_name, text, list):
     print('Writing...')
     with open('result/' + file_name + '.txt',mode='w',encoding='utf-8') as f:
-        f.write('******Property情報****************************\n')
-        f.write('  ファイル名 : ' + file_name + '\n')
-        f.write('  フォルダ名 : ' + folder_name + '\n')
-        f.write('  拡張子     : ' + extention + '\n')
-        f.write('  作成日時   : ' + create_date + '\n')
-        f.write('  更新日時   : ' + update_date + '\n')
-        f.write('\n\n')
 
         f.write('******単語抽出*******************************\n')
         f.write("《抽出数＝" + str(len(list)) + '単語》\n')
@@ -159,7 +153,22 @@ def write_to_text(text, file_name, folder_name, extention, create_date, update_d
         f.write(text)
     print('Completed!')
 
+# OpenCVでは日本語のファイル名が文字化けしてしまう
+# 文字化け対策を施したメソッドを新たに作成
+def imwrite(filename, img, params=None):
+    try:
+        ext = os.path.splitext(filename)[1]
+        result, n = cv2.imencode(ext, img, params)
 
+        if result:
+            with open(filename, mode='w+b') as f:
+                n.tofile(f)
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(e)
+        return False
 
 # 1ファイルのOCR実行
 def run(path):
@@ -177,31 +186,35 @@ def run(path):
     # area = np.array([190,220,260,37])
 
     ##########################################################
-
     # PNGに変換（Tesseractの要件）
     img = convert_pdfpng2ndarray(path)
     # imageをネガポジ変換する　認識精度低下したため、ネガポジ変換はしない
     # img = convert_bitwise(img)
 
+    # property情報のdictionary
+    property_list = {}
+
     # ファイル名の取得
-    file_name = get_fname(path)
-    print(file_name)
+    property_list[0] = get_fname(path)
     # フォルダ名の取得
-    folder_name = get_fdname(path)
+    property_list[1] = get_fdname(path)
     # 拡張子の取得
-    extention = get_ext(path)
+    property_list[2] = get_ext(path)
     # 作成日時の取得
-    create_date = get_ctime(path)
+    property_list[3] = get_ctime(path)
     # 更新日時の取得
-    update_date = get_mtime(path)
+    property_list[4] = get_mtime(path)
+
+        # fp = FileProperty(property_list[0], property_list[1], property_list[2], property_list[3], property_list[4])
+        # print(fp.get_fname())
 
     # OCRの実行
     if TARGET == False:
         #### 領域指定なし######
-        txt = convert_png2txt(img, file_name)
+        txt = convert_png2txt(img, property_list[0])
     else:
         #### 領域指定######
-        txt = convert_png2txt_fromarray(img, area, file_name)
+        txt = convert_png2txt_fromarray(img, area, property_list[0])
 
     # 文章中の不要なスペースを削除
     txt = delete_space(txt)
@@ -210,10 +223,20 @@ def run(path):
     word_list = extract_words(txt)
 
     # 読み取ったテキストをTEXTファイルに書き出す
-    write_to_text(txt, file_name, folder_name, extention, create_date, update_date, word_list)
+    write_to_text(property_list[0], txt, word_list)
+    text_path = 'result/' + property_list[0] + '.txt'
+    property_list[5] = text_path
+    property_list[6] = word_list[0][0] + '::' + str(word_list[0][1])
+    property_list[7] = word_list[1][0] + '::' + str(word_list[1][1])
+    property_list[8] = word_list[2][0] + '::' + str(word_list[2][1])
+    property_list[9] = word_list[3][0] + '::' + str(word_list[3][1])
+    property_list[10] = word_list[4][0] + '::' + str(word_list[4][1])
 
-
-
+    # CSV出力
+    with open('result.csv', mode='a') as f:
+        for i in range(11):
+            f.write(str(property_list[i]) + ',')
+        f.write('\n')
 
 print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝')
 tools = pyocr.get_available_tools()
@@ -231,70 +254,24 @@ print("Will use lang '%s'" % (lang))
 print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝')
 
 
-# #####################＜変更箇所＞##########################
-# # 領域指定か否か
-# # 領域を指定してOCRする場合はTrueとする
-# TARGET = False
-
-# # 領域を指定する場合の変数
-# area = np.array([])
-# # 配光成績書
-# # area = np.array([580,40,380,80])
-# # マーキング整合確認書
-# # area = np.array([100,60,550,120])
-# # area = np.array([190,220,260,37])
-
-# ##########################################################
-
 # 引数で指定されたパスにあるイメージデータの読み込み
 path = sys.argv[1]
 target_list = glob.glob(path+ '/**/*.pdf', recursive=True)
 
 # 指定のパス配下にあるファイルをOCR
 for file_num in range(len(target_list)):
+# for file_num in range(len(target_list)):
     print(str(file_num+1)+'件目実行開始 (全'+ str(len(target_list))+'件中）')
+
     try:
-        run(target_list[file_num])          
+        run(target_list[file_num])
+
     except :
-        # TODO 毎回1行目しか書込みできない。毎回次の行となるように修正
-        with open('ErrorFileList.txt',mode='w',encoding='utf-8') as f:
+        # ファイル末尾へ追記するため、mode='a'
+        with open('ErrorFileList.txt',mode='a', encoding='utf-8') as f:
             f.write(target_list[file_num] + '\n')
         print(target_list[file_num])
+        print(str(file_num+1)+'件目   《NG》\n')
+    print('========================\n')
 
-# # PNGに変換（Tesseractの要件）
-# img = convert_pdfpng2ndarray(path)
-# # imageをネガポジ変換する　認識精度低下したため、ネガポジ変換はしない
-# # img = convert_bitwise(img)
-
-# # ファイル名の取得
-# file_name = get_fname(path)
-# # フォルダ名の取得
-# folder_name = get_fdname(path)
-# # 拡張子の取得
-# extention = get_ext(path)
-# # 作成日時の取得
-# create_date = get_ctime(path)
-# # 更新日時の取得
-# update_date = get_mtime(path)
-
-# # OCRの実行
-# if TARGET == False:
-#     #### 領域指定なし######
-#     txt = convert_png2txt(img, file_name)
-# else:
-#     #### 領域指定######
-#     txt = convert_png2txt_fromarray(img, area, file_name)
-
-# # 不要なスペースを削除
-# txt = delete_space(txt)
-
-# # 頻出単語を抽出
-# list = extract_words(txt)
-
-# # 読み取ったテキストをTEXTファイルに書き出す
-# write_to_text(txt, file_name, folder_name, extention, create_date, update_date, list)
-
-
-# 読み取ったテキストをコマンドラインに表示
-# print(txt)
 
