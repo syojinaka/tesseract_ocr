@@ -1,22 +1,20 @@
 from PIL import Image
-import sys
+import sys, os, re, glob
 from pdf2image import convert_from_path
 
 import pyocr
-import pyocr.builders
-import sys
-import re
+import pyocr.builders as pb
 import mimetypes
 import cv2
 import numpy as np
-import os
 import pathlib
 import datetime
 import MeCab
 from collections import Counter
-import glob
 import csv
 import fileProperty
+import pickle
+import shutil
 
 # 変換：：convert from PDF or PNG to numpy.ndarray
 def convert_pdfpng2ndarray(path):
@@ -24,15 +22,14 @@ def convert_pdfpng2ndarray(path):
     # PDFだった場合はPNGに変換する
     if mime[0] == 'application/pdf':
         images = convert_from_path(path)
-        # グレースケール
+        # グレースケール化
         gray_scale_image = images[0].convert('L')
-        # type of gray_scale_image is "PIL.Image.Image"
+        # PIL.Image.Image
         image = np.array(gray_scale_image, dtype=np.uint8)
-
-    elif mime[0] == 'image/png':
-        image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        
-    return image
+        return image
+    elif mime[0] == 'image/png' or mime[0] == 'image/jpeg':
+        image = cv2.imread(path)
+        return image
 
 # 光学認識：：PNG　⇒　TXT
 def convert_png2txt(target_img, file_name):
@@ -43,7 +40,7 @@ def convert_png2txt(target_img, file_name):
     txt = tool.image_to_string(
         Image.fromarray(target_img),
         lang = lang,
-        builder = pyocr.builders.TextBuilder(tesseract_layout=6))
+        builder = pb.TextBuilder(tesseract_layout=6))
     print('Recoginzed!\n')
     return txt
 
@@ -57,7 +54,7 @@ def convert_png2txt_fromarray(target_img, area, file_name):
     txt = tool.image_to_string(
         Image.fromarray(target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]]),
         lang = lang,
-        builder = pyocr.builders.TextBuilder(tesseract_layout=7))
+        builder = pb.TextBuilder(tesseract_layout=7))
 
     print('Recoginzed!\n')
     return txt
@@ -186,8 +183,6 @@ def run(path):
     # area = np.array([190,220,260,37])
 
     ##########################################################
-    # PNGに変換（Tesseractの要件）
-    img = convert_pdfpng2ndarray(path)
     # imageをネガポジ変換する　認識精度低下したため、ネガポジ変換はしない
     # img = convert_bitwise(img)
 
@@ -205,8 +200,15 @@ def run(path):
     # 更新日時の取得
     property_list[4] = get_mtime(path)
 
-        # fp = FileProperty(property_list[0], property_list[1], property_list[2], property_list[3], property_list[4])
-        # print(fp.get_fname())
+    # fp = FileProperty(property_list[0], property_list[1], property_list[2], property_list[3], property_list[4])
+    # print(fp.get_fname())
+
+    # PNGに変換（Tesseractの要件）
+    # 元画像をOCRするとエラーになるが、コピーしてきたデータであればエラーにならない
+    # OCRの対象はローカルにコピーしてきたファイル
+    # img = convert_pdfpng2ndarray('data/' + property_list[0] + '.png')
+    # 元画像をイメージ化
+    img = convert_pdfpng2ndarray(path)
 
     # OCRの実行
     if TARGET == False:
@@ -215,28 +217,38 @@ def run(path):
     else:
         #### 領域指定######
         txt = convert_png2txt_fromarray(img, area, property_list[0])
+    
 
     # 文章中の不要なスペースを削除
     txt = delete_space(txt)
 
     # 頻出単語を抽出
     word_list = extract_words(txt)
+    print(property_list[0])
+    print(extract_words(property_list[0]))
 
     # 読み取ったテキストをTEXTファイルに書き出す
     write_to_text(property_list[0], txt, word_list)
+
     text_path = 'result/' + property_list[0] + '.txt'
     property_list[5] = text_path
-    property_list[6] = word_list[0][0] + '::' + str(word_list[0][1])
-    property_list[7] = word_list[1][0] + '::' + str(word_list[1][1])
-    property_list[8] = word_list[2][0] + '::' + str(word_list[2][1])
-    property_list[9] = word_list[3][0] + '::' + str(word_list[3][1])
-    property_list[10] = word_list[4][0] + '::' + str(word_list[4][1])
+
+
+    if len(word_list) > 4:
+        for i in range(5):
+            property_list[6+i] = word_list[i][0] + '::' + str(word_list[i][1])
+    elif len(word_list) > 0:
+        for i in range(len(word_list)):
+            property_list[6+i] = word_list[i][0] + '::' + str(word_list[i][1])
 
     # CSV出力
     with open('result.csv', mode='a') as f:
-        for i in range(11):
+        for i in range(len(property_list)):
             f.write(str(property_list[i]) + ',')
         f.write('\n')
+
+    
+
 
 print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝')
 tools = pyocr.get_available_tools()
@@ -256,12 +268,20 @@ print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝�
 
 # 引数で指定されたパスにあるイメージデータの読み込み
 path = sys.argv[1]
+# リストを1度pickle化することで、リスト内の参照を早くすることができる
+# with open('pickle.binaryfile', 'wb') as pi:
+#     pickle.dump(glob.glob(path+ '/**/*.png', recursive=True), pi, pickle.HIGHEST_PROTOCOL) 
+# with open('pickle.binaryfile', 'rb') as pi:
+#     target_list = pickle.load(pi)
+
 target_list = glob.glob(path+ '/**/*.pdf', recursive=True)
 
 # 指定のパス配下にあるファイルをOCR
-for file_num in range(len(target_list)):
-# for file_num in range(len(target_list)):
+for file_num in range(28, len(target_list)):
+# for file_num in range(list_len):
     print(str(file_num+1)+'件目実行開始 (全'+ str(len(target_list))+'件中）')
+    shutil.copy2(target_list[file_num],'data/' + get_fname(target_list[file_num]) + '.png')
+
 
     try:
         run(target_list[file_num])
@@ -272,6 +292,9 @@ for file_num in range(len(target_list)):
             f.write(target_list[file_num] + '\n')
         print(target_list[file_num])
         print(str(file_num+1)+'件目   《NG》\n')
+
+    # run(target_list[file_num])
+
     print('========================\n')
 
 
