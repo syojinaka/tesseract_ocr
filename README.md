@@ -39,5 +39,17 @@ https://punhundon-lifeshift.com/tesseract_ocr
   https://qiita.com/madaaamj/items/71fbfbf71c9ff56e1987
   https://qiita.com/myaun/items/9f8fee924fdc3f7ef411
   
+###MeCabの文字コード問題
+　ユーザー辞書作成を、上記URL記載の情報を基に行ったが、
+  登録した単語を含んだ文章をMeCabで形態素解析させると、
+  1つの単語として認識させることはできた。
+  ただし、品詞名などが文字化けしてしまい、「名詞」のみを抽出する条件に
+  引っかからなくなってしまった。
+  
+  原因は下記2つ
+  　・システム辞書がUTF-8ではない（こちらだけでは解消されなかった）
+    ・ユーザー辞書であるCSVファイルがUTF-8となっていない（これで解決）
+　　　　コンパイルはUTF-8と指定して実行していたが、元のファイルがたしかEUC?とかだった
+
 ### 進捗バー（できたら・・）
   https://narito.ninja/blog/detail/68/
