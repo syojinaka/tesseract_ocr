@@ -47,7 +47,10 @@ https://punhundon-lifeshift.com/tesseract_ocr
   原因は下記2つ
   　・システム辞書がUTF-8ではない（こちらだけでは解消されなかった）
     ・ユーザー辞書であるCSVファイルがUTF-8となっていない（これで解決）
-　　　　コンパイルはUTF-8と指定して実行していたが、元のファイルがたしかEUC?とかだった
+　　　　コンパイルはUTF-8と指定して実行していたが、元のファイルがたしかEUC?とかだった 
+    
+ ### GCPのVisionAPIテスト
+ https://qiita.com/se_fy/items/963b295bbd13101c044b
 
 ### 進捗バー（できたら・・）
   https://narito.ninja/blog/detail/68/
