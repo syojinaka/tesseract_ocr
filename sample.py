@@ -13,34 +13,48 @@ import MeCab
 from collections import Counter
 import csv
 import fileProperty
-import pickle
+import tifffile
 import shutil
+
+# Image.MAX_IMAGE_PIXELS = 1000000000
 
 # 変換：：convert from PDF or PNG to numpy.ndarray
 def convert_pdfpng2ndarray(path):
     mime = mimetypes.guess_type(path)
-    # PDFだった場合はPNGに変換する
+    # PDFの場合
     if mime[0] == 'application/pdf':
         images = convert_from_path(path)
+        print(type(images[0]))
         # グレースケール化
         gray_scale_image = images[0].convert('L')
         # PIL.Image.Image
         image = np.array(gray_scale_image, dtype=np.uint8)
+        print(type(image))
         return image
+
+    # PNG/JPEGファイルの場合
     elif mime[0] == 'image/png' or mime[0] == 'image/jpeg':
         image = cv2.imread(path)
         return image
 
+    # TIFFファイルの場合
+    elif mime[0] == 'image/tiff':
+        # TIFFファイルをPNGファイルとしてdataフォルダへ格納
+        shutil.copy2(target_list[file_num],'data/' + get_fname(path) + '.png')
+        # ローカルのPNGファイルをイメージオブジェクトに変換
+        image = cv2.imread('data/' + get_fname(path) + '.png')
+        print(type(image))
+        return image
+
 # 光学認識：：PNG　⇒　TXT
 def convert_png2txt(target_img, file_name):
-    # 読み取り対象をPNGとして保存
-    imwrite('result/' + file_name + '.png',target_img)
     print('Now recognizing.....')
 
     txt = tool.image_to_string(
         Image.fromarray(target_img),
         lang = lang,
         builder = pb.TextBuilder(tesseract_layout=6))
+
     print('Recoginzed!\n')
     return txt
 
@@ -49,7 +63,7 @@ def convert_png2txt(target_img, file_name):
 def convert_png2txt_fromarray(target_img, area, file_name):
     # 読み取り領域確認用
     # 　PNGファイルとして保存
-    imwrite('result/' + file_name + '.png',target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]])
+    # imwrite('result/' + file_name + '.png',target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]])
     print('Now recognizing.....')
     txt = tool.image_to_string(
         Image.fromarray(target_img[area[1]:area[1]+area[3], area[0]:area[0]+area[2]]),
@@ -69,11 +83,22 @@ def convert_bitwise(img):
     img = cv2.bitwise_not(img)
     return img
 
-# 不自然な空白を除去
-# 日本語だけの場合は下記コメントアウト解除
-def delete_space(txt):
+# 不要な文字/空白を除去
+def eliminate_char(txt):
+    # 不自然な空白を除去
     txt = re.sub('([あ-んア-ン一-龥ー])\s+((?=[あ-んア-ン一-龥ー]))',r'\1\2', txt)
-    return txt
+
+    # 不要文字を除去して返却
+    return eliminate_word(txt)
+
+# 不要文字列の除去
+def eliminate_word(text):
+    # 文字変換の関数の中でtranslate関数が早いらしい
+    table = text.maketrans({
+        '|': '', 
+        '一': ''
+    })
+    return text.translate(table)
 
 # 拡張子を除去したファイル名を返却
 def eliminate_ext(name):
@@ -203,43 +228,64 @@ def run(path):
     # fp = FileProperty(property_list[0], property_list[1], property_list[2], property_list[3], property_list[4])
     # print(fp.get_fname())
 
-    # PNGに変換（Tesseractの要件）
-    # 元画像をOCRするとエラーになるが、コピーしてきたデータであればエラーにならない
-    # OCRの対象はローカルにコピーしてきたファイル
-    # img = convert_pdfpng2ndarray('data/' + property_list[0] + '.png')
-    # 元画像をイメージ化
-    img = convert_pdfpng2ndarray(path)
-
-    # OCRの実行
-    if TARGET == False:
-        #### 領域指定なし######
-        txt = convert_png2txt(img, property_list[0])
-    else:
-        #### 領域指定######
-        txt = convert_png2txt_fromarray(img, area, property_list[0])
+    img = np.array([])
+    txt = ''
+    try:
+        # PNGに変換（Tesseractの要件）
+        # 元画像をOCRするとエラーになるが、コピーしてきたデータであればエラーにならない
+        # OCRの対象はローカルにコピーしてきたファイル
+        # img = convert_pdfpng2ndarray('data/' + property_list[0] + '.png')
+        # 元画像をイメージ化したい場合
+        img = convert_pdfpng2ndarray(path)
     
+        # 読み取り対象をPNGとして保存
+        imwrite('data/' + property_list[0] + '.png',img)
 
-    # 文章中の不要なスペースを削除
-    txt = delete_space(txt)
+        # OCRの実行
+        if TARGET == False:
+            #### 領域指定なし######
+            txt = convert_png2txt(img, property_list[0])
+        else:
+            #### 領域指定######
+            txt = convert_png2txt_fromarray(img, area, property_list[0])
+        # OCR成功であれば、「OK」を代入
+        property_list[5] = 'OK'
 
-    # 頻出単語を抽出
-    word_list = extract_words(txt)
-    print(property_list[0])
-    print(extract_words(property_list[0]))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        property_list[5] = 'NG'
+        # ファイル末尾へ追記するため、mode='a'
+        with open('ErrorFileList.txt',mode='a', encoding='utf-8') as f:
+            f.write('=============================================' + '\n')
+            f.write(target_list[file_num] + '\n')
+            print(e.args)
+
+    word_list = []
+    if property_list[5] == 'OK':
+        # テキストの不要な文字を除去
+        txt = eliminate_char(txt)
+
+        # 頻出単語を抽出
+        word_list = extract_words(txt)
+        print(property_list[0])
+        print(extract_words(property_list[0]))
 
     # 読み取ったテキストをTEXTファイルに書き出す
     write_to_text(property_list[0], txt, word_list)
 
     text_path = 'result/' + property_list[0] + '.txt'
-    property_list[5] = text_path
+    property_list[6] = text_path
 
+    # 出現単語数
+    property_list[7] = str(len(word_list))+'語'
 
     if len(word_list) > 4:
         for i in range(5):
-            property_list[6+i] = word_list[i][0] + '::' + str(word_list[i][1])
+            property_list[8+i] = word_list[i][0] + '::' + str(word_list[i][1])
     elif len(word_list) > 0:
         for i in range(len(word_list)):
-            property_list[6+i] = word_list[i][0] + '::' + str(word_list[i][1])
+            property_list[8+i] = word_list[i][0] + '::' + str(word_list[i][1])
 
     # CSV出力
     with open('result.csv', mode='a') as f:
@@ -248,7 +294,15 @@ def run(path):
         f.write('\n')
 
     
+#####################＜変更箇所＞##########################
 
+# EXTENTION= 'tiff'
+# EXTENTION= 'pdf'
+EXTENTION= 'png'
+# EXTENTION= 'bmp'
+# EXTENTION= 'jpg'
+
+##########################################################
 
 print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝')
 tools = pyocr.get_available_tools()
@@ -268,33 +322,24 @@ print('＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝�
 
 # 引数で指定されたパスにあるイメージデータの読み込み
 path = sys.argv[1]
-# リストを1度pickle化することで、リスト内の参照を早くすることができる
-# with open('pickle.binaryfile', 'wb') as pi:
-#     pickle.dump(glob.glob(path+ '/**/*.png', recursive=True), pi, pickle.HIGHEST_PROTOCOL) 
-# with open('pickle.binaryfile', 'rb') as pi:
-#     target_list = pickle.load(pi)
-
-target_list = glob.glob(path+ '/**/*.pdf', recursive=True)
+# 指定拡張子のデータリストを作成
+target_list = glob.glob(path + '/**/*.' + EXTENTION, recursive=True)
 
 # 指定のパス配下にあるファイルをOCR
-for file_num in range(28, len(target_list)):
+for file_num in range(len(target_list)):
 # for file_num in range(list_len):
     print(str(file_num+1)+'件目実行開始 (全'+ str(len(target_list))+'件中）')
-    shutil.copy2(target_list[file_num],'data/' + get_fname(target_list[file_num]) + '.png')
 
+    # 元ファイルをローカルに保存したい場合はコメントアウト解除
+    # shutil.copy2(target_list[file_num],'pdf/' + get_fname(target_list[file_num]) + '.pdf')
 
-    try:
-        run(target_list[file_num])
+    # TIFFの場合はdataフォルダにPNGファイルとして保存する
+    # shutil.copy2(target_list[file_num],'data/' + get_fname(target_list[file_num]) + '.png')
 
-    except :
-        # ファイル末尾へ追記するため、mode='a'
-        with open('ErrorFileList.txt',mode='a', encoding='utf-8') as f:
-            f.write(target_list[file_num] + '\n')
-        print(target_list[file_num])
-        print(str(file_num+1)+'件目   《NG》\n')
+    # OCR対象となるファイルのパスを表示
+    print(target_list[file_num])
 
-    # run(target_list[file_num])
+    # OCR実行
+    run(target_list[file_num])
 
     print('========================\n')
-
-
