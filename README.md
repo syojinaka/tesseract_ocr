@@ -54,3 +54,6 @@ https://punhundon-lifeshift.com/tesseract_ocr
 
 ### 進捗バー（できたら・・）
   https://narito.ninja/blog/detail/68/
+  
+ ### いつかやりたい　Flask＆OpenCV
+ https://teratail.com/questions/164621
