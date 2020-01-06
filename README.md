@@ -60,3 +60,4 @@ https://punhundon-lifeshift.com/tesseract_ocr
  
  ### ひらがな・カタカナ変換 ###
  https://pypi.org/project/jaconv/
+ https://pypi.org/project/neologdn/  ←こっちの方が使えそう
