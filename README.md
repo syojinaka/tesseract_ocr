@@ -57,3 +57,6 @@ https://punhundon-lifeshift.com/tesseract_ocr
   
  ### いつかやりたい　Flask＆OpenCV
  https://teratail.com/questions/164621
+ 
+ ###ひらがな・カタカナの変換###
+ https://pypi.org/project/jaconv/
